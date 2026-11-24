@@ -1,0 +1,49 @@
+#!/usr/bin/env sh
+set -eu
+
+# POSIX bootstrap launcher for this project. Downloads Gradle once,
+# verifies the official SHA-256, then forwards all arguments to Gradle.
+GRADLE_VERSION="8.14.8"
+GRADLE_SHA256="94da89692fc3ca6d2d0ce6bb48548762ea0f1897ba444286f5c7f3759c7af651"
+GRADLE_URL="https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+GRADLE_USER_HOME="${GRADLE_USER_HOME:-$HOME/.gradle}"
+CACHE_DIR="${GRADLE_USER_HOME}/manual-wrapper/dists/gradle-${GRADLE_VERSION}-bin"
+GRADLE_HOME="${CACHE_DIR}/gradle-${GRADLE_VERSION}"
+ZIP_FILE="${CACHE_DIR}/gradle-${GRADLE_VERSION}-bin.zip"
+
+if [ ! -x "${GRADLE_HOME}/bin/gradle" ]; then
+  mkdir -p "${CACHE_DIR}"
+  echo "Gradle ${GRADLE_VERSION} belum tersedia. Mengunduh distribusi resmi..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --retry 3 --output "${ZIP_FILE}" "${GRADLE_URL}"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "${ZIP_FILE}" "${GRADLE_URL}"
+  else
+    echo "Perlu curl atau wget untuk mengunduh Gradle." >&2
+    exit 1
+  fi
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_SHA256="$(sha256sum "${ZIP_FILE}" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL_SHA256="$(shasum -a 256 "${ZIP_FILE}" | awk '{print $1}')"
+  else
+    echo "Perlu sha256sum atau shasum untuk memverifikasi unduhan." >&2
+    exit 1
+  fi
+
+  if [ "${ACTUAL_SHA256}" != "${GRADLE_SHA256}" ]; then
+    rm -f "${ZIP_FILE}"
+    echo "SHA-256 distribusi Gradle tidak cocok." >&2
+    exit 1
+  fi
+
+  if ! command -v unzip >/dev/null 2>&1; then
+    echo "Perlu unzip untuk mengekstrak distribusi Gradle." >&2
+    exit 1
+  fi
+  unzip -oq "${ZIP_FILE}" -d "${CACHE_DIR}"
+  rm -f "${ZIP_FILE}"
+fi
+
+exec "${GRADLE_HOME}/bin/gradle" "$@"
